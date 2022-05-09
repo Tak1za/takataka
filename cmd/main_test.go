@@ -10,16 +10,24 @@ import (
 )
 
 func setup() *myHandler {
+	shards := 100
+	allShards := make([]cache, shards)
+	for i := 0; i < shards; i++ {
+		allShards[i] = cache{
+			holder: make(map[uint32]int),
+		}
+	}
 	return &myHandler{
-		entries: make([][]byte, 0),
-		cache:   make(map[int]int),
+		totalShards: 100,
+		entries:     make([]entry, 0),
+		allShards:   allShards,
 	}
 }
 
 func BenchmarkAddStringValue(b *testing.B) {
 	mh := setup()
 	router := http.NewServeMux()
-	router.Handle("/add", mh)
+	router.HandleFunc("/add", mh.Add)
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprint(i)
 		value := fmt.Sprintf("solo%d", i)
@@ -41,7 +49,7 @@ func BenchmarkAddStringValue(b *testing.B) {
 func BenchmarkAddIntValue(b *testing.B) {
 	mh := setup()
 	router := http.NewServeMux()
-	router.Handle("/add", mh)
+	router.HandleFunc("/add", mh.Add)
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprint(i)
 		value := i
@@ -63,7 +71,7 @@ func BenchmarkAddIntValue(b *testing.B) {
 func BenchmarkAddComplexValue(b *testing.B) {
 	mh := setup()
 	router := http.NewServeMux()
-	router.Handle("/add", mh)
+	router.HandleFunc("/add", mh.Add)
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprint(i)
 		complex := struct {
@@ -92,7 +100,7 @@ func BenchmarkGetStringValue(b *testing.B) {
 	mh := setup()
 	val := b.N
 	router := http.NewServeMux()
-	router.Handle("/add", mh)
+	router.HandleFunc("/add", mh.Add)
 	for i := 0; i < val; i++ {
 		key := fmt.Sprint(i)
 		value := fmt.Sprintf("solo%d", i)
@@ -110,7 +118,7 @@ func BenchmarkGetStringValue(b *testing.B) {
 	b.ResetTimer()
 
 	router = http.NewServeMux()
-	router.Handle("/get/", mh)
+	router.HandleFunc("/get/", mh.Get)
 	for i := 0; i < val; i++ {
 		key := fmt.Sprint(i)
 		getRequest, _ := http.NewRequest("GET", fmt.Sprintf("/get/%s", key), nil)
@@ -126,7 +134,7 @@ func BenchmarkGetIntValue(b *testing.B) {
 	mh := setup()
 	val := b.N
 	router := http.NewServeMux()
-	router.Handle("/add", mh)
+	router.HandleFunc("/add", mh.Add)
 	for i := 0; i < val; i++ {
 		key := fmt.Sprint(i)
 		value := i
@@ -144,7 +152,7 @@ func BenchmarkGetIntValue(b *testing.B) {
 	b.ResetTimer()
 
 	router = http.NewServeMux()
-	router.Handle("/get/", mh)
+	router.HandleFunc("/get/", mh.Get)
 	for i := 0; i < val; i++ {
 		key := fmt.Sprint(i)
 		getRequest, _ := http.NewRequest("GET", fmt.Sprintf("/get/%s", key), nil)
@@ -160,7 +168,7 @@ func BenchmarkGetComplexValue(b *testing.B) {
 	mh := setup()
 	val := b.N
 	router := http.NewServeMux()
-	router.Handle("/add", mh)
+	router.HandleFunc("/add", mh.Add)
 	for i := 0; i < val; i++ {
 		key := fmt.Sprint(i)
 		complex := struct {
@@ -187,7 +195,7 @@ func BenchmarkGetComplexValue(b *testing.B) {
 	b.ResetTimer()
 
 	router = http.NewServeMux()
-	router.Handle("/get/", mh)
+	router.HandleFunc("/get/", mh.Get)
 	for i := 0; i < val; i++ {
 		key := fmt.Sprint(i)
 		getRequest, _ := http.NewRequest("GET", fmt.Sprintf("/get/%s", key), nil)

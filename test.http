@@ -1,0 +1,11 @@
+### Add
+POST http://localhost:3000/add HTTP/1.1
+Content-Type: application/json
+
+{
+    "key": "yolo2",
+    "value": "solo2"
+}
+
+### Get
+GET http://localhost:3000/get/yolo2 HTTP/1.1
