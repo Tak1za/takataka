@@ -74,44 +74,6 @@ func (mh *myHandler) Add(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (mh *myHandler) appendToCache(hashedIndex uint32, offset int) {
-	shardNumber := hashedIndex % uint32(mh.totalShards)
-	mh.allShards[shardNumber].l.Lock()
-	defer mh.allShards[shardNumber].l.Unlock()
-	mh.allShards[shardNumber].holder[hashedIndex] = offset
-}
-
-func main() {
-	shards := 100
-	allShards := make([]cache, shards)
-	for i := 0; i < shards; i++ {
-		allShards[i] = cache{
-			holder: make(map[uint32]int),
-		}
-	}
-	mux := http.NewServeMux()
-	mh := myHandler{
-		allShards:   allShards,
-		totalShards: shards,
-		entries:     make([]entry, 0),
-	}
-	rh := redisHandler{
-		ctx: context.Background(),
-		rdb: redis.NewClient(&redis.Options{
-			Addr:     "localhost:6379",
-			Password: "",
-			DB:       0,
-		}),
-	}
-	mh.entries = append(mh.entries, entry{value: nil})
-	mux.HandleFunc("/add", mh.Add)
-	mux.HandleFunc("/get/", mh.Get)
-	mux.HandleFunc("/redis/add", rh.redisAdd)
-	mux.HandleFunc("/redis/get/", rh.redisGet)
-
-	http.ListenAndServe(":3000", mux)
-}
-
 func (mh *myHandler) appendAndGetOffset(val []byte) int {
 	mh.l.TryLock()
 
@@ -124,6 +86,13 @@ func (mh *myHandler) appendAndGetOffset(val []byte) int {
 	index := len(mh.entries) - 1
 
 	return index
+}
+
+func (mh *myHandler) appendToCache(hashedIndex uint32, offset int) {
+	shardNumber := hashedIndex % uint32(mh.totalShards)
+	mh.allShards[shardNumber].l.Lock()
+	defer mh.allShards[shardNumber].l.Unlock()
+	mh.allShards[shardNumber].holder[hashedIndex] = offset
 }
 
 func (rh *redisHandler) redisGet(w http.ResponseWriter, r *http.Request) {
@@ -160,4 +129,35 @@ func (rh *redisHandler) redisAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
+}
+
+func main() {
+	shards := 100
+	allShards := make([]cache, shards)
+	for i := 0; i < shards; i++ {
+		allShards[i] = cache{
+			holder: make(map[uint32]int),
+		}
+	}
+	mux := http.NewServeMux()
+	mh := myHandler{
+		allShards:   allShards,
+		totalShards: shards,
+		entries:     make([]entry, 0),
+	}
+	rh := redisHandler{
+		ctx: context.Background(),
+		rdb: redis.NewClient(&redis.Options{
+			Addr:     "localhost:6379",
+			Password: "",
+			DB:       0,
+		}),
+	}
+	mh.entries = append(mh.entries, entry{value: nil})
+	mux.HandleFunc("/add", mh.Add)
+	mux.HandleFunc("/get/", mh.Get)
+	mux.HandleFunc("/redis/add", rh.redisAdd)
+	mux.HandleFunc("/redis/get/", rh.redisGet)
+
+	http.ListenAndServe(":3000", mux)
 }
