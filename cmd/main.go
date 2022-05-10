@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/segmentio/fasthash/fnv1a"
 )
 
@@ -31,6 +33,11 @@ type myHandler struct {
 	totalShards int
 	allShards   []cache
 	entries     []entry
+}
+
+type redisHandler struct {
+	rdb *redis.Client
+	ctx context.Context
 }
 
 func (mh *myHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -88,9 +95,19 @@ func main() {
 		totalShards: shards,
 		entries:     make([]entry, 0),
 	}
+	rh := redisHandler{
+		ctx: context.Background(),
+		rdb: redis.NewClient(&redis.Options{
+			Addr:     "localhost:6379",
+			Password: "",
+			DB:       0,
+		}),
+	}
 	mh.entries = append(mh.entries, entry{value: nil})
 	mux.HandleFunc("/add", mh.Add)
 	mux.HandleFunc("/get/", mh.Get)
+	mux.HandleFunc("/redis/add", rh.redisAdd)
+	mux.HandleFunc("/redis/get/", rh.redisGet)
 
 	http.ListenAndServe(":3000", mux)
 }
@@ -107,4 +124,40 @@ func (mh *myHandler) appendAndGetOffset(val []byte) int {
 	index := len(mh.entries) - 1
 
 	return index
+}
+
+func (rh *redisHandler) redisGet(w http.ResponseWriter, r *http.Request) {
+	key := r.URL.Path[11:]
+	val, err := rh.rdb.Get(rh.ctx, key).Result()
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	w.Write([]byte(val))
+}
+
+func (rh *redisHandler) redisAdd(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	var c content
+	if err := json.Unmarshal(body, &c); err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	data, _ := json.Marshal(c.Value)
+
+	if err := rh.rdb.Set(rh.ctx, c.Key, data, time.Duration(1<<63-1)).Err(); err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
 }
